@@ -2,28 +2,19 @@ import os from 'node:os';
 import client from 'prom-client';
 
 /**
- * Prometheus instrumentation for Wayfinder. Metric names, labels, and the
- * default port match the OneBusAway Twilio app so both services can share
- * dashboards and alert rules.
+ * Prometheus instrumentation for Wayfinder. The HTTP histogram matches the
+ * metric name and labels queried by OBACloud's per-organization dashboards.
  */
-
-export const DEFAULT_METRICS_PORT = 9119;
 
 function createMetrics() {
 	const registry = new client.Registry();
 	client.collectDefaultMetrics({ register: registry });
 
-	const httpRequests = new client.Counter({
-		name: 'http_requests_total',
-		help: 'Total HTTP requests by method, route template, and status code.',
-		labelNames: ['method', 'route', 'status'],
-		registers: [registry]
-	});
-
 	const httpDuration = new client.Histogram({
-		name: 'http_request_duration_seconds',
-		help: 'HTTP request latency by method and route template.',
-		labelNames: ['method', 'route'],
+		name: 'http_server_requests_seconds',
+		help: 'HTTP server request duration in seconds.',
+		labelNames: ['service', 'organization', 'method', 'uri', 'status'],
+		buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
 		registers: [registry]
 	});
 
@@ -54,7 +45,7 @@ function createMetrics() {
 		}
 	});
 
-	return { registry, httpRequests, httpDuration };
+	return { registry, httpDuration };
 }
 
 // Stored on globalThis so dev-mode HMR re-evaluation neither double-registers
@@ -63,29 +54,19 @@ const metrics = (globalThis.__wayfinderMetrics ??= createMetrics());
 
 export const metricsContentType = metrics.registry.contentType;
 
-export function recordHttpRequest({ method, route, status, durationSeconds }) {
-	metrics.httpRequests.inc({ method, route, status });
-	metrics.httpDuration.observe({ method, route }, durationSeconds);
+export function recordHttpRequest({ method, organization, route, status, durationSeconds }) {
+	metrics.httpDuration.observe(
+		{
+			service: 'wayfinder',
+			organization,
+			method,
+			uri: route,
+			status: String(status)
+		},
+		durationSeconds
+	);
 }
 
 export function renderMetrics() {
 	return metrics.registry.metrics();
-}
-
-/**
- * Validates a METRICS_PORT value with the same semantics as the Twilio app:
- * unset/empty silently uses the default; anything that is not an integer in
- * [1, 65535] logs a warning and uses the default.
- */
-export function resolveMetricsPort(raw) {
-	const trimmed = (raw ?? '').trim();
-	if (trimmed === '') {
-		return DEFAULT_METRICS_PORT;
-	}
-	const parsed = Number(trimmed);
-	if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-		console.warn(`Invalid METRICS_PORT="${raw}", using default ${DEFAULT_METRICS_PORT}`);
-		return DEFAULT_METRICS_PORT;
-	}
-	return parsed;
 }

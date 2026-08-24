@@ -223,11 +223,15 @@
 		"type": "string",
 		"description": "Defines a style for MapLibre map. Defaults to positron if not set"
 	},
-	"METRICS_PORT": {
+	"PUBLIC_METRICS_ENABLED": {
 		"required": false,
-		"type": "number",
-		"min": 1,
-		"max": 65535,
-		"description": "Port for the internal-only Prometheus /metrics HTTP server (default: 9119)"
+		"type": "boolean",
+		"description": "Whether to expose Prometheus metrics at GET /metrics (default: false)"
+	},
+	"PUBLIC_METRICS_ORGANIZATION": {
+		"required": false,
+		"type": "string",
+		"allowEmpty": true,
+		"description": "OBACloud Organization.name label included in Prometheus metrics; required at runtime when PUBLIC_METRICS_ENABLED=true."
 	}
 }
